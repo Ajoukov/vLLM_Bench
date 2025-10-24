@@ -59,6 +59,8 @@ configMapGenerator:
       - VLLM_LOGGING_LEVEL=DEBUG
       - VLLM_ALLOW_DEPRECATED_BEAM_SEARCH=1
       - VLLM_ATTENTION_BACKEND=TORCH_SDPA
+    options:
+      disableNameSuffixHash: true
 
 secretGenerator:
   - name: hf-token-secret
@@ -86,22 +88,28 @@ mkdir -p k8s
 cp template/* k8s
 printf "%s\n" "${kustomization}" > k8s/kustomization.yaml
 
-# Kill existing Job (Jobs' pod template is immutable)
-kubectl -n "${namespace}" delete job vllm --ignore-not-found
-# In case pods linger, nuke them
-kubectl -n "${namespace}" delete pod -l app=vllm --ignore-not-found --grace-period=0 --force || true
-# Wait for deletion to complete (best-effort)
-kubectl -n "${namespace}" wait --for=delete job/vllm --timeout=120s || true
+# only restart if model changed or pod not Ready
+CURRENT_MODEL="$(kubectl -n "${namespace}" get configmap vllm-config -o jsonpath='{.data.MODEL}' 2>/dev/null || echo)"
+POD="$(kubectl -n "${namespace}" get pod -l app=vllm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+READY="$( [ -n "$POD" ] && kubectl -n "${namespace}" get pod "$POD" -o jsonpath='{range .status.conditions[?(@.type=="Ready")]}{.status}{end}' 2>/dev/null || echo )"
+echo $CURRENT_MODEL
+echo $model
+echo $READY
+if [ "$CURRENT_MODEL" = "$model" ] && [ "$READY" = "True" ]; then
+  echo "vLLM already running with model '${model}', skipping redeploy."
+else
+  echo "Deploying (model change or pod not ready)."
+  kubectl -n "${namespace}" delete job vllm --ignore-not-found
+  kubectl -n "${namespace}" delete pod -l app=vllm --ignore-not-found --force --grace-period=0 || true
+  kubectl -n "${namespace}" wait --for=delete job/vllm --timeout=120s || true
+  kubectl apply -k k8s
+  echo "waiting for Ready state..."
+  kubectl -n "${namespace}" wait --for=condition=Ready pod -l app=vllm --timeout=30m
+  echo "bench.py is ready to go!"
+fi
 
-kubectl apply -k k8s
-
-kubectl -n "${namespace}" get pods -l app=vllm
-
+# get new pod
 POD="$(kubectl -n "${namespace}" get pod -l app=vllm -o jsonpath='{.items[0].metadata.name}')"
-
-echo "waiting for Ready state..."
-kubectl -n "${namespace}" wait --for=condition=Ready pod -l app=vllm --timeout=20m
-echo "bench.py is ready to go!"
 
 kubectl -n "${namespace}" port-forward "pod/${POD}" "${port_local}:${port_remote}" >/dev/null 2>&1 &
 
