@@ -1,0 +1,53 @@
+{
+  "endpoint": "http://127.0.0.1:8080",
+  "defaults": {
+    "model": "meta-llama/Llama-3.1-8B",
+    "api_kind": "completions",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "qps": 2.0,
+    "limit": 1,
+    "stream": true,
+    "seed": 1234,
+    "out_dir": "./runs",
+    "cache_dir": "./.hf-cache"
+  },
+  "workloads": {
+    "spsr": {
+      "alpaca": { "enabled": true, "temperature": 0.0, "limit": 1, "max_tokens": 512 },
+      "triviaqa": { "enabled": true, "temperature": 0.0, "limit": 1 },
+      "narrativeqa": { "enabled": true, "temperature": 0.0, "limit": 1 },
+      "wikitext": { "enabled": true, "temperature": 0.0, "limit": 1, "max_tokens": 512 }
+    },
+    "beam": {
+      "longbench_gov": { "enabled": true, "use_beam_search": true, "num_beams": 4, "best_of": 4, "limit": 1, "max_tokens": 512 },
+      "longbench_qmsum": { "enabled": true, "use_beam_search": true, "num_beams": 4, "best_of": 4, "limit": 1, "max_tokens": 512 },
+      "narrativeqa": { "enabled": true, "use_beam_search": true, "num_beams": 4, "best_of": 4, "limit": 1 },
+      "triviaqa": { "enabled": true, "use_beam_search": true, "num_beams": 4, "best_of": 4, "limit": 1 }
+    },
+    "prefix": {
+      "kvprobe": { "enabled": true, "system_prompt": "You are a concise assistant.", "limit": 5 },
+      "sharegpt": { "enabled": true, "limit": 1, "max_tokens": 512 },
+      "leval": { "enabled": true, "limit": 1, "max_tokens": 512, "comment": "Requires 130k+ context window" },
+      "longchat": { "enabled": false, "temperature": 0.7, "top_p": 0.95, "limit": 1, "max_tokens": 512 }
+    },
+    "chat": {
+      "sharegpt": { "enabled": true, "temperature": 0.7, "top_p": 0.95, "limit": 1, "max_tokens": 512 },
+      "longchat": { "enabled": false, "temperature": 0.7, "top_p": 0.95, "limit": 1, "max_tokens": 512 }
+    },
+    "qa": {
+      "triviaqa": { "enabled": true, "temperature": 0.0, "top_p": 1.0, "limit": 1 },
+      "narrativeqa": { "enabled": true }
+    },
+    "summ": {
+      "loogle": { "enabled": true, "temperature": 0.7, "top_p": 0.95, "limit": 1 },
+      "longbench_gov": { "enabled": true, "temperature": 0.7, "top_p": 0.95, "limit": 1 },
+      "longbench_qmsum": { "enabled": true, "temperature": 0.7, "top_p": 0.95, "limit": 1 }
+    },
+    "code": {
+      "humaneval": { "enabled": true, "api_kind": "completions", "best_of": 10, "max_tokens": 256 }
+    }
+  }
+}
+
