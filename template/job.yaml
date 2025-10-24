@@ -1,3 +1,4 @@
+# template/job.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -11,44 +12,53 @@ spec:
     spec:
       shareProcessNamespace: true
       restartPolicy: Never
-      volumes:
-        - name: app-volume
-          persistentVolumeClaim: { claimName: vllm-pvc }
-        - name: cache-volume
-          persistentVolumeClaim: { claimName: vllm-pvc }
-        - name: shm
-          emptyDir: { medium: Memory, sizeLimit: "1G" }
       containers:
         - name: infinity
           image: ubuntu:22.04
           command: ["sleep","infinity"]
+          envFrom:
+            - configMapRef: { name: vllm-config }
           env:
-            - { name: VLLM_USE_FLASHINFER_SAMPLER, value: "0" }
-            - { name: VLLM_LOGGING_LEVEL, value: "DEBUG" }
             - name: HUGGING_FACE_HUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: $(HF_SECRET_NAME)
-                  key: token
-            - { name: VLLM_ALLOW_DEPRECATED_BEAM_SEARCH, value: "1" }
-            - { name: VLLM_ATTENTION_BACKEND, value: "TORCH_SDPA" }
+              valueFrom: { secretKeyRef: { name: $(HF_SECRET_NAME), key: token } }
+            - name: HF_TOKEN
+              valueFrom: { secretKeyRef: { name: $(HF_SECRET_NAME), key: token } }
+
         - name: vllm-container
           image: vllm/vllm-openai:v0.11.0
-              # --host 0.0.0.0 --port 8000 --max-model-len 35000
           command: ["/bin/sh","-c"]
           args:
             - >
-              vllm serve facebook/opt-125m
-              --host 0.0.0.0 --port 8000 --max-model-len 1000
+              vllm serve "$MODEL"
+              --host 0.0.0.0
+              --port 8000
+              --max-model-len "$MAX_MODEL_LEN"
               --gpu-memory-utilization 0.3
+          envFrom:
+            - configMapRef: { name: vllm-config }
           env:
-            - { name: VLLM_USE_FLASHINFER_SAMPLER, value: "0" }
-            - { name: VLLM_LOGGING_LEVEL, value: "DEBUG" }
             - name: HUGGING_FACE_HUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: $(HF_SECRET_NAME)
-                  key: token
-            - { name: VLLM_ALLOW_DEPRECATED_BEAM_SEARCH, value: "1" }
-            - { name: VLLM_ATTENTION_BACKEND, value: "TORCH_SDPA" }
+              valueFrom: { secretKeyRef: { name: $(HF_SECRET_NAME), key: token } }
+            - name: HF_TOKEN
+              valueFrom: { secretKeyRef: { name: $(HF_SECRET_NAME), key: token } }
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 120   # ~10 minutes
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
 

@@ -1,7 +1,12 @@
 {
   "endpoint": "http://127.0.0.1:8080",
+  "hf_token": "",
+  "namespace": "",
+  "port_local": "8080",
+  "port_remote": "8000",
   "defaults": {
-    "model": "meta-llama/Llama-3.1-8B",
+    "model": "facebook/opt-125m",
+    "max_model_len": "1000",
     "api_kind": "completions",
     "max_tokens": 256,
     "temperature": 0.0,

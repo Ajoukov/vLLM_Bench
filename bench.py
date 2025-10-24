@@ -1004,7 +1004,7 @@ def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str) -> Wo
     endpoint = global_endpoint or m.get("endpoint") or "http://127.0.0.1:8080"
     opts = WorkloadOpts(
         endpoint=endpoint,
-        model=m.get("model", "meta-llama/Llama-3.1-8B"),
+        model=m.get("model"),
         api_kind=m.get("api_kind", "chat"),
         temperature=float(m.get("temperature", 0.0)),
         max_tokens=int(m.get("max_tokens", 256)),
