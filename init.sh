@@ -22,38 +22,70 @@ echo "Installing dependencies..."
 pip install --quiet --upgrade pip
 pip install --quiet requests datasets rouge-score tiktoken huggingface_hub orjson
 
-pyget() {
+# Function to get all model names
+get_models() {
   python3 - "$CONFIG_JSON" <<'PY'
 import json, sys
 cfg = json.load(open(sys.argv[1]))
-# print(cfg, file=sys.stderr)
-# print keys if present; else empty
-print(cfg.get("namespace",""))
-print(cfg.get("hf_token",""))
-print(cfg.get("port_local",""))
-print(cfg.get("port_remote",""))
-print(cfg.get("defaults",{}).get("model",""))
-print(cfg.get("defaults",{}).get("max_model_len",""))
+models = cfg.get("models", {})
+for model_name in models.keys():
+    print(model_name)
 PY
 }
-mapfile -t _vals < <(pyget)
-namespace="${_vals[0]:-}"
-hf_token="${_vals[1]:-}"
-port_local="${_vals[2]:-}"
-port_remote="${_vals[3]:-}"
-model="${_vals[4]:-}"
-max_model_len="${_vals[5]:-}"
 
-for var in namespace hf_token port_local port_remote model max_model_len; do
-    val="${!var:-}"
-    echo $var = $val
-    [ -z "$val" ] && {
-        echo "error: $var missing. Add \"$var\" to $CONFIG_JSON." >&2
-        exit 2
-    }
-done
+# Function to get model-specific configuration
+get_model_config() {
+  local model_name="$1"
+  python3 - "$CONFIG_JSON" "$model_name" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+model_name = sys.argv[2]
+models = cfg.get("models", {})
+model_cfg = models.get(model_name, {})
+# Print model configuration values
+print(cfg.get("namespace", ""))
+print(cfg.get("hf_token", ""))
+print(model_cfg.get("port_local", ""))
+print(model_cfg.get("port_remote", ""))
+print(model_cfg.get("model", model_name))  # Use model name from config or fallback to key
+print(model_cfg.get("max_model_len", ""))
+PY
+}
 
-kustomization="
+# Get all models
+echo "=== Loading models from config ==="
+mapfile -t MODELS < <(get_models)
+echo "Found ${#MODELS[@]} models: ${MODELS[@]}"
+
+# Process each model
+for model_name in "${MODELS[@]}"; do
+    echo ""
+    echo "=============================================="
+    echo "=== Processing model: $model_name ==="
+    echo "=============================================="
+    echo ""
+    
+    # Get model-specific configuration
+    mapfile -t _vals < <(get_model_config "$model_name")
+    namespace="${_vals[0]:-}"
+    hf_token="${_vals[1]:-}"
+    port_local="${_vals[2]:-}"
+    port_remote="${_vals[3]:-}"
+    model="${_vals[4]:-}"
+    max_model_len="${_vals[5]:-}"
+    
+    echo "Configuration for $model_name:"
+    for var in namespace hf_token port_local port_remote model max_model_len; do
+        val="${!var:-}"
+        echo "  $var = $val"
+        [ -z "$val" ] && {
+            echo "error: $var missing for model $model_name." >&2
+            exit 2
+        }
+    done
+    
+    # Create kustomization for this model
+    kustomization="
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -96,37 +128,51 @@ replacements:
           - spec.template.spec.containers.[name=infinity].env.[name=HUGGING_FACE_HUB_TOKEN].valueFrom.secretKeyRef.name
           - spec.template.spec.containers.[name=infinity].env.[name=HF_TOKEN].valueFrom.secretKeyRef.name
 "
+    
+    # Materialize kustomize dir
+    mkdir -p k8s
+    cp template/* k8s
+    printf "%s\n" "${kustomization}" > k8s/kustomization.yaml
+    
+    # Always restart for new model (as requested)
+    echo "Deploying model: ${model}..."
+    kubectl -n "${namespace}" delete job vllm --ignore-not-found
+    kubectl -n "${namespace}" delete pod -l app=vllm --ignore-not-found --force --grace-period=0 || true
+    kubectl -n "${namespace}" wait --for=delete job/vllm --timeout=120s || true
+    kubectl apply -k k8s
+    echo "Waiting for model to be ready..."
+    kubectl -n "${namespace}" wait --for=condition=Ready pod -l app=vllm --timeout=30m
+    echo "Model ${model} is ready!"
+    
+    # Get new pod
+    POD="$(kubectl -n "${namespace}" get pod -l app=vllm -o jsonpath='{.items[0].metadata.name}')"
+    
+    # Kill any existing port-forward
+    pkill -f "port-forward.*${port_local}:${port_remote}" 2>/dev/null || true
+    sleep 2
+    
+    # Start port forwarding
+    echo "Starting port-forward on ${port_local}:${port_remote}..."
+    kubectl -n "${namespace}" port-forward "pod/${POD}" "${port_local}:${port_remote}" >/dev/null 2>&1 &
+    PORT_FORWARD_PID=$!
+    
+    # Wait for port forward to be ready
+    sleep 5
+    
+    # Run benchmarks for this model
+    echo ""
+    echo "=== Running benchmarks for model: $model_name ==="
+    python bench.py run "$CONFIG_JSON" --model "$model_name"
+    
+    # Kill port-forward for this model
+    kill $PORT_FORWARD_PID 2>/dev/null || true
+    
+    echo ""
+    echo "=== Completed benchmarks for model: $model_name ==="
+    echo ""
+done
 
-# Materialize kustomize dir
-mkdir -p k8s
-cp template/* k8s
-printf "%s\n" "${kustomization}" > k8s/kustomization.yaml
-
-# only restart if model changed or pod not Ready
-CURRENT_MODEL="$(kubectl -n "${namespace}" get configmap vllm-config -o jsonpath='{.data.MODEL}' 2>/dev/null || echo)"
-POD="$(kubectl -n "${namespace}" get pod -l app=vllm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-READY="$( [ -n "$POD" ] && kubectl -n "${namespace}" get pod "$POD" -o jsonpath='{range .status.conditions[?(@.type=="Ready")]}{.status}{end}' 2>/dev/null || echo )"
-echo $CURRENT_MODEL
-echo $model
-echo $READY
-if [ "$CURRENT_MODEL" = "$model" ] && [ "$READY" = "True" ]; then
-  echo "vLLM already running with model '${model}', skipping redeploy."
-else
-  echo "Deploying (model change or pod not ready)."
-  kubectl -n "${namespace}" delete job vllm --ignore-not-found
-  kubectl -n "${namespace}" delete pod -l app=vllm --ignore-not-found --force --grace-period=0 || true
-  kubectl -n "${namespace}" wait --for=delete job/vllm --timeout=120s || true
-  kubectl apply -k k8s
-  echo "waiting for Ready state..."
-  kubectl -n "${namespace}" wait --for=condition=Ready pod -l app=vllm --timeout=30m
-  echo "bench.py is ready to go!"
-fi
-
-# get new pod
-POD="$(kubectl -n "${namespace}" get pod -l app=vllm -o jsonpath='{.items[0].metadata.name}')"
-
-kubectl -n "${namespace}" port-forward "pod/${POD}" "${port_local}:${port_remote}" >/dev/null 2>&1 &
-
-echo "running bench.py..."
-python bench.py run $CONFIG_JSON
-
+echo ""
+echo "=============================================="
+echo "=== All models processed successfully! ==="
+echo "=============================================="

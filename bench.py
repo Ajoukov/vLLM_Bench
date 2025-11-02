@@ -1135,6 +1135,7 @@ def main():
     sub.add_parser("list")
     runp = sub.add_parser("run")
     runp.add_argument("config")
+    runp.add_argument("--model", help="Model to use for benchmarking")
     runp.add_argument("category", nargs="?")
     runp.add_argument("workload", nargs="?")
     args = ap.parse_args()
@@ -1143,8 +1144,24 @@ def main():
         print(json.dumps(list_all(), indent=2, sort_keys=True)); return
 
     cfg = _load_json(args.config)
-    endpoint = cfg.get("endpoint") or (cfg.get("defaults") or {}).get("endpoint") or "http://127.0.0.1:8080"
-    defaults = cfg.get("defaults") or {}
+    
+    # Get model-specific configuration
+    model_name = args.model
+    if not model_name:
+        print("Error: --model parameter is required", file=sys.stderr)
+        sys.exit(1)
+    
+    models_cfg = cfg.get("models", {})
+    if model_name not in models_cfg:
+        print(f"Error: Model '{model_name}' not found in config", file=sys.stderr)
+        available_models = list(models_cfg.keys())
+        print(f"Available models: {available_models}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Use model-specific defaults
+    model_config = models_cfg[model_name]
+    endpoint = model_config.get("endpoint", "http://127.0.0.1:8080")
+    defaults = model_config  # Use entire model config as defaults
     cfg_wls = cfg.get("workloads") or {}
 
     assert_server_up(endpoint); served = list_models(endpoint)
