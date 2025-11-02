@@ -4,12 +4,25 @@
 
 * Kubernetes access via `~/.kube/config` (cluster/context already set).
 * `kubectl` (with built-in kustomize).
-* Python 3.10+ with libs:
-
-  ```bash
-  pip install requests datasets rouge-score tiktoken huggingface_hub orjson
-  ```
+* Python 3.10+
 * Hugging Face token must have access to the chosen model (gated models will 403).
+
+## Dependencies
+
+The `init.sh` script will automatically create a virtual environment (`.venv`) and install the following Python dependencies:
+
+* **requests** - HTTP client for API calls
+* **datasets** - HuggingFace Datasets library for loading benchmark datasets
+* **rouge-score** - ROUGE metric calculation for summarization tasks
+* **tiktoken** - OpenAI tokenizer for token counting
+* **huggingface_hub** - HuggingFace Hub client for downloading datasets
+* **orjson** - Fast JSON serialization
+
+If you need to install these manually (e.g., for development), run:
+
+```bash
+pip install requests datasets rouge-score tiktoken huggingface_hub orjson
+```
 
 ## Files
 

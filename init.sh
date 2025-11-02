@@ -8,6 +8,20 @@ USAGE='./init.sh [config.json]'
 
 CONFIG_JSON=$1
 
+# Create virtual environment if it doesn't exist
+if [ ! -d ".venv" ]; then
+    echo "Creating Python virtual environment..."
+    python3 -m venv .venv
+fi
+
+# Activate virtual environment
+source .venv/bin/activate
+
+# Install dependencies
+echo "Installing dependencies..."
+pip install --quiet --upgrade pip
+pip install --quiet requests datasets rouge-score tiktoken huggingface_hub orjson
+
 pyget() {
   python3 - "$CONFIG_JSON" <<'PY'
 import json, sys
@@ -114,5 +128,5 @@ POD="$(kubectl -n "${namespace}" get pod -l app=vllm -o jsonpath='{.items[0].met
 kubectl -n "${namespace}" port-forward "pod/${POD}" "${port_local}:${port_remote}" >/dev/null 2>&1 &
 
 echo "running bench.py..."
-./bench.py run $CONFIG_JSON
+python bench.py run $CONFIG_JSON
 
