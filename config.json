@@ -1,6 +1,8 @@
 {
   "hf_token": "",
   "namespace": "",
+  "output_format": "csv",
+  "output_file": "./runs/benchmark_results.csv",
   "models": {
     "facebook/opt-125m": {
       "max_model_len": 1000,

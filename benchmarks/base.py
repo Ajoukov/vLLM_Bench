@@ -27,6 +27,8 @@ class WorkloadOpts:
     metrics_tokenizer_model: Optional[str]
     verbose: bool
     timeout_s: float
+    output_format: Optional[str]  # json, jsonl, csv, parquet, etc.
+    output_file: Optional[str]     # path to output file
 
 
 @dataclass

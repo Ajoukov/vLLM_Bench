@@ -75,6 +75,7 @@ import requests
 from benchmarks import get_registry, list_all
 from benchmarks.base import WorkloadOpts, Task
 from benchmarks.utils import model_tokenizer, count_tokens
+from benchmarks.output_writer import OutputWriter
 
 try:
     import orjson
@@ -202,6 +203,8 @@ def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str) -> Wo
         metrics_tokenizer_model=m.get("metrics_tokenizer_model"),
         verbose=bool(m.get("verbose", False)),
         timeout_s=float(m.get("timeout_s", 600.0)),
+        output_format=m.get("output_format"),  # json, jsonl, csv, parquet
+        output_file=m.get("output_file"),       # path to output file
     )
     return _enforce(cat, opts)
 
@@ -218,7 +221,7 @@ def _rate_limiter(qps: float):
         t_last[0] = now()
     yield wait
 
-def run_task(opts: WorkloadOpts, w):
+def run_task(opts: WorkloadOpts, w, shared_output_writer=None):
     os.makedirs(opts.out_dir, exist_ok=True); os.makedirs(opts.cache_dir, exist_ok=True)
     rng = random.Random(opts.seed)
     tokenizer = model_tokenizer(opts.metrics_tokenizer_model or opts.model) if opts.metrics_tokenizer!="whitespace" else None
@@ -286,15 +289,24 @@ def run_task(opts: WorkloadOpts, w):
             n += 1; sum_lat += latency; sum_ctok += ctok; sum_ptok += ptok
             if ttft is not None: ttft_list.append(ttft)
 
+    # Get evaluator results (includes metrics like EM, F1, ROUGE, pass@k, etc.)
+    eval_results = evaluator.finalize()
+    
     agg = {
-        "category": w.category, "workload": w.name, "samples": n,
+        "model": opts.model,
+        "category": w.category,
+        "workload": w.name,
+        "samples": n,
         "avg_latency_s": (sum_lat/n if n else None),
         "avg_ttft_s": (sum(ttft_list)/len(ttft_list) if ttft_list else None),
         "avg_completion_tokens": (sum_ctok/n if n else None),
+        "avg_prompt_tokens": (sum_ptok/n if n else None),
         "agg_tpot_tokens_per_s": (sum_ctok/sum_lat if sum_lat>0 else None),
-        "evaluator": evaluator.finalize(),
         "out_file": out_path
     }
+    # Merge evaluator results into aggregate (adds EM, F1, ROUGE-L, etc.)
+    agg.update(eval_results)
+    
     with open(manifest_path,"w",encoding="utf-8") as mf:
         manifest = {
             "opts": asdict(opts),
@@ -304,6 +316,10 @@ def run_task(opts: WorkloadOpts, w):
         }
         mf.write(jdump(manifest))
     print(json.dumps(agg, indent=2, sort_keys=True))
+    
+    # Add aggregate result to shared output writer if provided
+    if shared_output_writer:
+        shared_output_writer.add_aggregate_result(agg)
 
 # ---------------- CLI ----------------
 
@@ -361,6 +377,14 @@ def main():
     # Get registry from benchmarks module
     _REGISTRY = get_registry()
 
+    # Create a single shared output writer for all benchmarks
+    # Use global output settings from config if available
+    global_output_format = cfg.get("output_format") or defaults.get("output_format")
+    global_output_file = cfg.get("output_file") or defaults.get("output_file")
+    shared_writer = None
+    if global_output_format and global_output_file:
+        shared_writer = OutputWriter(global_output_format, global_output_file)
+    
     for cat, wl_name in targets:
         wlist = _REGISTRY.get(cat) or []
         w = next((x for x in wlist if x.name == wl_name), None)
@@ -370,7 +394,25 @@ def main():
         opts = _build_opts(endpoint, defaults, per_cfg, cat)
         if opts.model not in served:
             raise SystemExit(f"Model '{opts.model}' not served at {opts.endpoint}. Served: {sorted(served)}")
-        run_task(opts, w)
+        
+        # Use per-workload writer if configured, otherwise use shared writer
+        workload_writer = None
+        if opts.output_format and opts.output_file:
+            workload_writer = OutputWriter(opts.output_format, opts.output_file)
+        elif shared_writer:
+            workload_writer = shared_writer
+        
+        run_task(opts, w, workload_writer)
+        
+        # Write workload-specific output immediately if configured
+        if opts.output_format and opts.output_file and workload_writer != shared_writer:
+            workload_writer.write(mode='append')
+            print(f"[Output] Written aggregate result to {opts.output_file} (format: {opts.output_format})")
+    
+    # Write shared output once at the end
+    if shared_writer and shared_writer.aggregate_results:
+        shared_writer.write(mode='append')
+        print(f"[Output] Written {len(shared_writer.aggregate_results)} aggregate results to {global_output_file} (format: {global_output_format})")
 
 def _load_json(path: str) -> dict:
     with open(path,"r",encoding="utf-8") as f: return json.load(f)

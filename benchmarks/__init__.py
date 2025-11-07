@@ -74,12 +74,16 @@ register("chat", "sharegpt")(ShareGPTChat)
 register("chat", "longchat")(LongChatChat)
 
 
+# Import OutputWriter for export
+from .output_writer import OutputWriter
+
 # Export key classes and functions
 __all__ = [
     'Workload',
     'register',
     'list_all',
     'get_registry',
+    'OutputWriter',
     # Task classes
     'TriviaQATask',
     'TriviaQASPSR',
