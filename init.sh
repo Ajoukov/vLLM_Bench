@@ -42,6 +42,7 @@ cfg = json.load(open(sys.argv[1]))
 model_name = sys.argv[2]
 models = cfg.get("models", {})
 model_cfg = models.get(model_name, {})
+lmcache_cfg = model_cfg.get("lmcache", {})
 # Print model configuration values
 print(cfg.get("namespace", ""))
 print(cfg.get("hf_token", ""))
@@ -49,6 +50,21 @@ print(model_cfg.get("port_local", ""))
 print(model_cfg.get("port_remote", ""))
 print(model_cfg.get("model", model_name))  # Use model name from config or fallback to key
 print(model_cfg.get("max_model_len", ""))
+# LMCache configuration - basic
+print(str(lmcache_cfg.get("enabled", False)).lower())
+print(lmcache_cfg.get("chunk_size", 256))
+# LMCache local CPU backend
+print(str(lmcache_cfg.get("local_cpu", True)).lower())
+print(lmcache_cfg.get("max_local_cpu_size", 20))
+# LMCache local disk backend (conditional)
+local_disk = lmcache_cfg.get("local_disk", False)
+print(str(local_disk).lower())
+print(lmcache_cfg.get("local_disk_path", "") if local_disk else "")
+print(lmcache_cfg.get("max_local_disk_size", 100) if local_disk else 0)
+# LMCache remote backend (conditional)
+remote_url = lmcache_cfg.get("remote_url", "")
+print(remote_url)
+print(lmcache_cfg.get("remote_serde", "safetensors") if remote_url else "")
 PY
 }
 
@@ -73,6 +89,15 @@ for model_name in "${MODELS[@]}"; do
     port_remote="${_vals[3]:-}"
     model="${_vals[4]:-}"
     max_model_len="${_vals[5]:-}"
+    lmcache_enabled="${_vals[6]:-false}"
+    lmcache_chunk_size="${_vals[7]:-256}"
+    lmcache_local_cpu="${_vals[8]:-true}"
+    lmcache_max_local_cpu_size="${_vals[9]:-20}"
+    lmcache_local_disk="${_vals[10]:-false}"
+    lmcache_local_disk_path="${_vals[11]:-}"
+    lmcache_max_local_disk_size="${_vals[12]:-0}"
+    lmcache_remote_url="${_vals[13]:-}"
+    lmcache_remote_serde="${_vals[14]:-}"
     
     echo "Configuration for $model_name:"
     for var in namespace hf_token port_local port_remote model max_model_len; do
@@ -84,7 +109,45 @@ for model_name in "${MODELS[@]}"; do
         }
     done
     
+    if [ "$lmcache_enabled" = "true" ]; then
+        echo "LMCache Configuration:"
+        echo "  enabled = true"
+        echo "  chunk_size = $lmcache_chunk_size"
+        echo "  local_cpu = $lmcache_local_cpu (max_size: ${lmcache_max_local_cpu_size}GB)"
+        [ "$lmcache_local_disk" = "true" ] && echo "  local_disk = true (path: ${lmcache_local_disk_path}, max_size: ${lmcache_max_local_disk_size}GB)"
+        [ -n "$lmcache_remote_url" ] && echo "  remote_url = $lmcache_remote_url (serde: ${lmcache_remote_serde})"
+    else
+        echo "LMCache: disabled"
+    fi
+    
     # Create kustomization for this model
+    # Build LMCache config literals conditionally
+    lmcache_literals=""
+    if [ "$lmcache_enabled" = "true" ]; then
+        lmcache_literals="
+      - LMCACHE_ENABLED=true
+      - LMCACHE_CHUNK_SIZE=${lmcache_chunk_size}
+      - LMCACHE_LOCAL_CPU=${lmcache_local_cpu}
+      - LMCACHE_MAX_LOCAL_CPU_SIZE=${lmcache_max_local_cpu_size}"
+        
+        if [ "$lmcache_local_disk" = "true" ] && [ -n "$lmcache_local_disk_path" ]; then
+            lmcache_literals="${lmcache_literals}
+      - LMCACHE_LOCAL_DISK=true
+      - LMCACHE_LOCAL_DISK_PATH=${lmcache_local_disk_path}
+      - LMCACHE_MAX_LOCAL_DISK_SIZE=${lmcache_max_local_disk_size}"
+        fi
+        
+        if [ -n "$lmcache_remote_url" ]; then
+            lmcache_literals="${lmcache_literals}
+      - LMCACHE_REMOTE_URL=${lmcache_remote_url}"
+            [ -n "$lmcache_remote_serde" ] && lmcache_literals="${lmcache_literals}
+      - LMCACHE_REMOTE_SERDE=${lmcache_remote_serde}"
+        fi
+    else
+        lmcache_literals="
+      - LMCACHE_ENABLED=false"
+    fi
+    
     kustomization="
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -104,7 +167,7 @@ configMapGenerator:
       - VLLM_USE_FLASHINFER_SAMPLER=0
       - VLLM_LOGGING_LEVEL=DEBUG
       - VLLM_ALLOW_DEPRECATED_BEAM_SEARCH=1
-      - VLLM_ATTENTION_BACKEND=TORCH_SDPA
+      - VLLM_ATTENTION_BACKEND=TORCH_SDPA${lmcache_literals}
     options:
       disableNameSuffixHash: true
 

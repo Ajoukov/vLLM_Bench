@@ -28,12 +28,25 @@ spec:
           image: vllm/vllm-openai:v0.11.0
           command: ["/bin/sh","-c"]
           args:
-            - >
-              vllm serve "$MODEL"
-              --host 0.0.0.0
-              --port 8000
-              --max-model-len "$MAX_MODEL_LEN"
-              --gpu-memory-utilization 0.3
+            - |
+              set -e
+              if [ "$LMCACHE_ENABLED" = "true" ]; then
+                echo "Starting vLLM with LMCache integration..."
+                echo "LMCache Config: chunk_size=$LMCACHE_CHUNK_SIZE, local_cpu=$LMCACHE_LOCAL_CPU"
+                vllm serve "$MODEL" \
+                  --host 0.0.0.0 \
+                  --port 8000 \
+                  --max-model-len "$MAX_MODEL_LEN" \
+                  --gpu-memory-utilization 0.3 \
+                  --kv-transfer-config "{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\",\"kv_rank\":0,\"kv_parallel_size\":1}"
+              else
+                echo "Starting standard vLLM..."
+                vllm serve "$MODEL" \
+                  --host 0.0.0.0 \
+                  --port 8000 \
+                  --max-model-len "$MAX_MODEL_LEN" \
+                  --gpu-memory-utilization 0.3
+              fi
           envFrom:
             - configMapRef: { name: vllm-config }
           env:

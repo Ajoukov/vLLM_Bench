@@ -19,7 +19,13 @@
       "seed": 1234,
       "out_dir": "./runs",
       "cache_dir": "./.hf-cache",
-      "model": "facebook/opt-125m"
+      "model": "facebook/opt-125m",
+      "lmcache": {
+        "enabled": true,
+        "chunk_size": 256,
+        "local_cpu": true,
+        "max_local_cpu_size": 20
+      }
     },
     "openai-community/gpt2": {
       "max_model_len": 1024,
@@ -36,7 +42,13 @@
       "seed": 1234,
       "out_dir": "./runs",
       "cache_dir": "./.hf-cache",
-      "model": "openai-community/gpt2"
+      "model": "openai-community/gpt2",
+      "lmcache": {
+        "enabled": true,
+        "chunk_size": 256,
+        "local_cpu": true,
+        "max_local_cpu_size": 20
+      }
     }
   },
   "workloads": {

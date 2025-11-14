@@ -29,6 +29,12 @@ class WorkloadOpts:
     timeout_s: float
     output_format: Optional[str]  # json, jsonl, csv, parquet, etc.
     output_file: Optional[str]     # path to output file
+    # LMCache configuration
+    lmcache_enabled: bool = False
+    lmcache_chunk_size: int = 256
+    lmcache_local_cpu: bool = True
+    lmcache_max_local_cpu_size: int = 20
+    lmcache_backend: str = "local"
 
 
 @dataclass

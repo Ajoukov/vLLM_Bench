@@ -181,6 +181,10 @@ def _enforce(cat: str, opts: WorkloadOpts) -> WorkloadOpts:
 def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str) -> WorkloadOpts:
     m = _merge(defaults, per)
     endpoint = global_endpoint or m.get("endpoint") or "http://127.0.0.1:8080"
+    
+    # Parse LMCache configuration
+    lmcache_config = m.get("lmcache", {})
+    
     opts = WorkloadOpts(
         endpoint=endpoint,
         model=m.get("model"),
@@ -205,6 +209,12 @@ def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str) -> Wo
         timeout_s=float(m.get("timeout_s", 600.0)),
         output_format=m.get("output_format"),  # json, jsonl, csv, parquet
         output_file=m.get("output_file"),       # path to output file
+        # LMCache configuration
+        lmcache_enabled=bool(lmcache_config.get("enabled", False)),
+        lmcache_chunk_size=int(lmcache_config.get("chunk_size", 256)),
+        lmcache_local_cpu=bool(lmcache_config.get("local_cpu", True)),
+        lmcache_max_local_cpu_size=int(lmcache_config.get("max_local_cpu_size", 20)),
+        lmcache_backend=str(lmcache_config.get("backend", "local")),
     )
     return _enforce(cat, opts)
 
