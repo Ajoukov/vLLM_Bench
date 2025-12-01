@@ -1,6 +1,112 @@
 #!/usr/bin/bash
 
-USAGE='./init.sh [config.json]'
+USAGE='./init.sh [config.json] | ./init.sh --cleanup [config.json]'
+
+# Check for cleanup flag
+if [ "$1" = "--cleanup" ]; then
+    [ $# -lt 2 ] && {
+        echo "Usage: $USAGE"
+        exit 1
+    }
+    CONFIG_JSON=$2
+    
+    echo "=============================================="
+    echo "=== Starting cleanup process ==="
+    echo "=============================================="
+    echo ""
+    
+    # Function to get all model namespaces
+    get_namespaces() {
+      python3 - "$CONFIG_JSON" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+namespace = cfg.get("namespace", "")
+if namespace:
+    print(namespace)
+PY
+    }
+    
+    # Kill all port-forward processes
+    echo "Killing all port-forward processes..."
+    pkill -f "kubectl.*port-forward" 2>/dev/null || true
+    
+    # Get namespace from config
+    namespace=$(get_namespaces)
+    
+    if [ -n "$namespace" ]; then
+        echo "Cleaning up Kubernetes resources in namespace: $namespace"
+        
+        # Delete jobs
+        echo "  - Deleting jobs..."
+        kubectl -n "${namespace}" delete job vllm --ignore-not-found
+        
+        # Delete pods forcefully
+        echo "  - Deleting pods..."
+        kubectl -n "${namespace}" delete pod -l app=vllm --ignore-not-found --force --grace-period=0 || true
+        
+        # Delete services
+        echo "  - Deleting services..."
+        kubectl -n "${namespace}" delete svc -l app=vllm --ignore-not-found
+        
+        # Delete PVCs (optional, comment out if you want to keep them)
+        echo "  - Deleting PVCs..."
+        kubectl -n "${namespace}" delete pvc -l app=vllm --ignore-not-found
+        
+        # Delete configmaps and secrets
+        echo "  - Deleting configmaps and secrets..."
+        kubectl -n "${namespace}" delete configmap vllm-config --ignore-not-found
+        kubectl -n "${namespace}" delete secret hf-token-secret --ignore-not-found
+        
+        echo "Kubernetes resources cleaned up successfully!"
+    else
+        echo "Warning: Could not determine namespace from config"
+    fi
+    
+    # Clean up k8s directory
+    if [ -d "k8s" ]; then
+        echo "Removing k8s directory..."
+        rm -rf k8s
+    fi
+    
+    # Clean up Python cache directories
+    echo "Cleaning up Python cache directories..."
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find . -type f -name "*.pyc" -delete 2>/dev/null || true
+    find . -type f -name "*.pyo" -delete 2>/dev/null || true
+    
+    # Clean up Hugging Face cache
+    if [ -d ".hf-cache" ]; then
+        echo "Removing Hugging Face cache (.hf-cache)..."
+        rm -rf .hf-cache
+    fi
+    
+    # Also check for default HF cache location
+    if [ -d "$HOME/.cache/huggingface" ]; then
+        echo "Found Hugging Face cache at $HOME/.cache/huggingface"
+        read -p "Do you want to delete it? This may be shared with other projects. (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Removing $HOME/.cache/huggingface..."
+            rm -rf "$HOME/.cache/huggingface"
+        else
+            echo "Skipping $HOME/.cache/huggingface"
+        fi
+    fi
+    
+    # Clean up virtual environment
+    if [ -d ".venv" ]; then
+        echo "Removing Python virtual environment..."
+        rm -rf .venv
+    fi
+    
+    echo ""
+    echo "=============================================="
+    echo "=== Cleanup completed successfully! ==="
+    echo "=============================================="
+    
+    exit 0
+fi
+
 [ $# -lt 1 ] && {
     echo Usage: $USAGE
     exit 1
