@@ -1,6 +1,86 @@
 #!/usr/bin/bash
 
-USAGE='./init.sh [config.json] | ./init.sh --cleanup [config.json]'
+USAGE='./init.sh [config.json] | ./init.sh --cleanup [config.json] | ./init.sh --docker [config.json]'
+
+# Check for docker flag
+if [ "$1" = "--docker" ]; then
+    [ $# -lt 2 ] && {
+        echo "Usage: $USAGE"
+        exit 1
+    }
+    CONFIG_JSON=$2
+    
+    echo "=============================================="
+    echo "=== Running in Docker container ==="
+    echo "=============================================="
+    echo ""
+    
+    # Check if Docker is installed
+    if ! command -v docker &> /dev/null; then
+        echo "Error: Docker is not installed. Please install Docker first."
+        exit 1
+    fi
+    
+    # Check if config file exists
+    if [ ! -f "$CONFIG_JSON" ]; then
+        echo "Error: Config file '$CONFIG_JSON' not found."
+        exit 1
+    fi
+    
+    # Get absolute paths
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CONFIG_ABS="$(cd "$(dirname "$CONFIG_JSON")" && pwd)/$(basename "$CONFIG_JSON")"
+    
+    # Determine kubeconfig location
+    KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
+    if [ ! -f "$KUBECONFIG_PATH" ]; then
+        echo "Error: Kubeconfig not found at $KUBECONFIG_PATH"
+        echo "Please set KUBECONFIG environment variable or ensure ~/.kube/config exists"
+        exit 1
+    fi
+    
+    IMAGE_NAME="vllm-bench:latest"
+    
+    # Build Docker image
+    echo "Building Docker image: $IMAGE_NAME"
+    docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+    
+    if [ $? -ne 0 ]; then
+        echo "Error: Docker build failed"
+        exit 1
+    fi
+    
+    echo ""
+    echo "Running benchmarks in container..."
+    echo ""
+    
+    # Run container with necessary mounts
+    docker run --rm \
+        --network host \
+        -v "$KUBECONFIG_PATH:/root/.kube/config:ro" \
+        -v "$CONFIG_ABS:/app/config.json:ro" \
+        -v "$SCRIPT_DIR/runs:/app/runs" \
+        -e KUBECONFIG=/root/.kube/config \
+        "$IMAGE_NAME" /app/config.json
+    
+    DOCKER_EXIT_CODE=$?
+    
+    if [ $DOCKER_EXIT_CODE -eq 0 ]; then
+        echo ""
+        echo "=============================================="
+        echo "=== Docker run completed successfully! ==="
+        echo "=============================================="
+        echo ""
+        echo "Results are available in: $SCRIPT_DIR/runs/"
+    else
+        echo ""
+        echo "=============================================="
+        echo "=== Docker run failed with exit code $DOCKER_EXIT_CODE ==="
+        echo "=============================================="
+    fi
+    
+    exit $DOCKER_EXIT_CODE
+fi
 
 # Check for cleanup flag
 if [ "$1" = "--cleanup" ]; then

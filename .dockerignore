@@ -1,0 +1,49 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Hugging Face cache
+.hf-cache/
+.cache/
+
+# Kubernetes generated files
+k8s/
+
+# Output files (will be mounted)
+runs/
+
+# Backup files
+*.bak
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Configs (will be mounted)
+config.json
+config.json.bak
+
+# Docs
+README.md
+*.md
+
+
