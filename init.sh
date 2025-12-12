@@ -77,14 +77,17 @@ PY
     
     # Run container with necessary mounts
     # Mount data_dir to /data for persistent dataset storage
+    # Run as current user to ensure correct file ownership on mounted volumes
     docker run --rm \
         --network host \
+        -u "$(id -u):$(id -g)" \
         -v "$KUBECONFIG_PATH:/root/.kube/config:ro" \
         -v "$CONFIG_ABS:/app/config.json:ro" \
         -v "$SCRIPT_DIR/runs:/app/runs" \
         -v "$DATA_DIR_ABS:/data" \
         -e KUBECONFIG=/root/.kube/config \
         -e HF_HOME=/data \
+        -e HOME=/tmp \
         "$IMAGE_NAME" /app/config.json
     
     DOCKER_EXIT_CODE=$?
