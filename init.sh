@@ -31,6 +31,27 @@ if [ "$1" = "--docker" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     CONFIG_ABS="$(cd "$(dirname "$CONFIG_JSON")" && pwd)/$(basename "$CONFIG_JSON")"
     
+    # Get data_dir from config (defaults to ./data)
+    DATA_DIR=$(python3 - "$CONFIG_JSON" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+print(cfg.get("data_dir", "./data"))
+PY
+    )
+    
+    # Make data_dir absolute if relative
+    if [[ "$DATA_DIR" != /* ]]; then
+        DATA_DIR="$SCRIPT_DIR/$DATA_DIR"
+    fi
+    
+    # Create data directory if it doesn't exist
+    mkdir -p "$DATA_DIR"
+    DATA_DIR_ABS="$(cd "$DATA_DIR" && pwd)"
+    
+    echo "Data directory: $DATA_DIR_ABS"
+    echo "  (datasets will be cached here for reuse across runs)"
+    echo ""
+    
     # Determine kubeconfig location
     KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
     if [ ! -f "$KUBECONFIG_PATH" ]; then
@@ -55,12 +76,15 @@ if [ "$1" = "--docker" ]; then
     echo ""
     
     # Run container with necessary mounts
+    # Mount data_dir to /data for persistent dataset storage
     docker run --rm \
         --network host \
         -v "$KUBECONFIG_PATH:/root/.kube/config:ro" \
         -v "$CONFIG_ABS:/app/config.json:ro" \
         -v "$SCRIPT_DIR/runs:/app/runs" \
+        -v "$DATA_DIR_ABS:/data" \
         -e KUBECONFIG=/root/.kube/config \
+        -e HF_HOME=/data \
         "$IMAGE_NAME" /app/config.json
     
     DOCKER_EXIT_CODE=$?
@@ -72,6 +96,7 @@ if [ "$1" = "--docker" ]; then
         echo "=============================================="
         echo ""
         echo "Results are available in: $SCRIPT_DIR/runs/"
+        echo "Cached datasets are stored in: $DATA_DIR_ABS"
     else
         echo ""
         echo "=============================================="
@@ -154,22 +179,26 @@ PY
     find . -type f -name "*.pyc" -delete 2>/dev/null || true
     find . -type f -name "*.pyo" -delete 2>/dev/null || true
     
-    # Clean up Hugging Face cache
-    if [ -d ".hf-cache" ]; then
-        echo "Removing Hugging Face cache (.hf-cache)..."
-        rm -rf .hf-cache
-    fi
+    # Get data_dir from config (defaults to ./data)
+    data_dir=$(python3 - "$CONFIG_JSON" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+print(cfg.get("data_dir", "./data"))
+PY
+    )
     
-    # Also check for default HF cache location
-    if [ -d "$HOME/.cache/huggingface" ]; then
-        echo "Found Hugging Face cache at $HOME/.cache/huggingface"
-        read -p "Do you want to delete it? This may be shared with other projects. (y/N): " -n 1 -r
+    # Clean up data directory (cached datasets) - ask user first
+    if [ -d "$data_dir" ]; then
+        echo ""
+        echo "Found dataset cache directory at $data_dir"
+        echo "This contains downloaded datasets that can be reused across benchmark runs."
+        read -p "Do you want to delete it? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "Removing $HOME/.cache/huggingface..."
-            rm -rf "$HOME/.cache/huggingface"
+            echo "Removing dataset cache directory ($data_dir)..."
+            rm -rf "$data_dir"
         else
-            echo "Skipping $HOME/.cache/huggingface"
+            echo "Keeping dataset cache directory ($data_dir)"
         fi
     fi
     

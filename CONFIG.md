@@ -29,6 +29,9 @@ Output format for benchmark results. Options: `"json"` or `"csv"`. Default: `"cs
 ### `output_file` (string, optional)
 Path where aggregated results will be saved. Default: `"./runs/benchmark_results.csv"`.
 
+### `data_dir` (string, optional)
+Directory for caching downloaded datasets. This directory persists between runs to avoid re-downloading datasets. In Docker mode, this directory is mounted to the container for persistent storage. Default: `"./data"`.
+
 ---
 
 ## Model Configuration
@@ -78,7 +81,7 @@ Random seed for reproducibility. Default: `1234`.
 Directory where individual benchmark outputs are saved. Default: `"./runs"`.
 
 ### `cache_dir` (string, optional)
-Directory for caching Hugging Face models and datasets. Default: `"./.hf-cache"`.
+Directory for caching Hugging Face models and datasets. If not specified, defaults to the global `data_dir` setting.
 
 ---
 
@@ -213,6 +216,7 @@ Number of candidate solutions to generate. Used for pass@k metrics in code gener
 {
   "namespace": "usr-myname-namespace",
   "hf_token": "hf_xxxxxxxxxxxxxxxxxxxxx",
+  "data_dir": "./data",
   "output_format": "csv",
   "output_file": "./runs/results.csv",
   
@@ -232,7 +236,6 @@ Number of candidate solutions to generate. Used for pass@k metrics in code gener
       "stream": true,
       "seed": 42,
       "out_dir": "./runs",
-      "cache_dir": "./.hf-cache",
       
       "lmcache": {
         "enabled": true,
@@ -276,6 +279,7 @@ Running with `--docker` provides:
 - Automatic dependency installation
 - Containerized execution
 - Persistent results via volume mounts
+- Persistent dataset caching (datasets downloaded once are reused across runs)
 - Automatic cleanup after completion
 
 Requirements:
@@ -287,6 +291,7 @@ The container mounts:
 - Kubeconfig (read-only)
 - Config file (read-only)
 - `./runs/` directory (for output persistence)
+- `data_dir` (configured in config, default: `./data`) → `/data` in container (for dataset persistence)
 
 ---
 
@@ -297,7 +302,8 @@ Running with `--cleanup` removes:
 - Port-forward processes
 - Generated `k8s/` directory
 - Python cache (`__pycache__`, `*.pyc`, `*.pyo`)
-- Local HF cache (`.hf-cache`)
 - Virtual environment (`.venv`)
-- Optionally: global HF cache at `~/.cache/huggingface` (with confirmation)
+- Dataset cache directory (`data_dir`, default: `./data`) - prompts before deletion
+
+This ensures cached datasets are preserved by default, avoiding re-downloads on subsequent runs.
 

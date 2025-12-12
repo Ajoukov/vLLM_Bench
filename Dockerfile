@@ -38,11 +38,13 @@ RUN chmod +x /app/init.sh
 
 # Set environment variables for containerized execution
 ENV RUNNING_IN_DOCKER=true
-ENV HF_HOME=/app/.hf-cache
 ENV PYTHONUNBUFFERED=1
+# HF_HOME will be set dynamically based on data_dir mount
+ENV HF_HOME=/data
 
-# Create directories for output and cache
-RUN mkdir -p /app/runs /app/.hf-cache
+# Create directories for output and data
+# The /data directory will be mounted from host for persistent dataset storage
+RUN mkdir -p /app/runs /data
 
 # Entry point
 ENTRYPOINT ["/app/init.sh"]

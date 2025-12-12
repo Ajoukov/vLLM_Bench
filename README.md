@@ -69,6 +69,7 @@ Edit `config.json` (required keys shown):
 {
   "namespace": "usr-xxx-namespace",
   "hf_token": "hf_yyy",
+  "data_dir": "./data",
   "models": {
     "facebook/opt-125m": {
       "max_model_len": 1000,
@@ -84,7 +85,6 @@ Edit `config.json` (required keys shown):
       "stream": true,
       "seed": 1234,
       "out_dir": "./runs",
-      "cache_dir": "./.hf-cache",
       "model": "facebook/opt-125m",
       "lmcache": {
         "enabled": true,

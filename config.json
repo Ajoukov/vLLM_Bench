@@ -1,6 +1,7 @@
 {
   "hf_token": "",
   "namespace": "",
+  "data_dir": "./data",
   "output_format": "csv",
   "output_file": "./runs/benchmark_results.csv",
   "models": {
@@ -18,7 +19,6 @@
       "stream": true,
       "seed": 1234,
       "out_dir": "./runs",
-      "cache_dir": "./.hf-cache",
       "model": "facebook/opt-125m",
       "lmcache": {
         "enabled": true,
@@ -41,7 +41,6 @@
       "stream": true,
       "seed": 1234,
       "out_dir": "./runs",
-      "cache_dir": "./.hf-cache",
       "model": "openai-community/gpt2",
       "lmcache": {
         "enabled": true,

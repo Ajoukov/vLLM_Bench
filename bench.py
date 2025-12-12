@@ -178,12 +178,16 @@ def _enforce(cat: str, opts: WorkloadOpts) -> WorkloadOpts:
         opts.api_kind = "chat"  # Force chat API for chatbots
     return opts
 
-def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str) -> WorkloadOpts:
+def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str, data_dir: str) -> WorkloadOpts:
     m = _merge(defaults, per)
     endpoint = global_endpoint or m.get("endpoint") or "http://127.0.0.1:8080"
     
     # Parse LMCache configuration
     lmcache_config = m.get("lmcache", {})
+    
+    # Use data_dir as the default cache directory for datasets
+    # In Docker mode, this will be mounted to /data for persistence
+    cache_dir = m.get("cache_dir") or data_dir
     
     opts = WorkloadOpts(
         endpoint=endpoint,
@@ -196,7 +200,7 @@ def _build_opts(global_endpoint: str, defaults: dict, per: dict, cat: str) -> Wo
         qps=float(m.get("qps", 4.0)),
         limit=int(m.get("limit", 100)),
         out_dir=m.get("out_dir", "./runs"),
-        cache_dir=m.get("cache_dir", "./.hf-cache"),
+        cache_dir=cache_dir,
         system_prompt=m.get("system_prompt"),
         use_beam_search=bool(m.get("use_beam_search", False)),
         num_beams=int(m.get("num_beams", 1)),
@@ -367,6 +371,11 @@ def main():
     endpoint = model_config.get("endpoint", "http://127.0.0.1:8080")
     defaults = model_config  # Use entire model config as defaults
     cfg_wls = cfg.get("workloads") or {}
+    
+    # Get data directory for persistent dataset storage
+    # In Docker mode, HF_HOME environment variable points to mounted /data
+    # Otherwise, use the config value or default to ./data
+    data_dir = os.environ.get("HF_HOME") or cfg.get("data_dir", "./data")
 
     assert_server_up(endpoint); served = list_models(endpoint)
 
@@ -401,7 +410,7 @@ def main():
         if w is None:
             print(f"Unknown workload '{wl_name}' in '{cat}'. Available: {list_all().get(cat, [])}", file=sys.stderr); sys.exit(2)
         per_cfg = (cfg_wls.get(cat) or {}).get(wl_name) or {}
-        opts = _build_opts(endpoint, defaults, per_cfg, cat)
+        opts = _build_opts(endpoint, defaults, per_cfg, cat, data_dir)
         if opts.model not in served:
             raise SystemExit(f"Model '{opts.model}' not served at {opts.endpoint}. Served: {sorted(served)}")
         
