@@ -1,4 +1,3 @@
 varReference:
   - kind: Job
     path: spec/template/spec/containers/env/valueFrom/secretKeyRef/name
-

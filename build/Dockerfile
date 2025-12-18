@@ -47,6 +47,4 @@ ENV HF_HOME=/data
 RUN mkdir -p /app/runs /data
 
 # Entry point
-ENTRYPOINT ["/app/init.sh"]
-
-
+ENTRYPOINT ["/app/scripts/init.sh"]
