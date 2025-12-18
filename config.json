@@ -1,6 +1,7 @@
 {
   "hf_token": "",
-  "namespace": "",
+  "namespace": "default",
+  "storage_class_name": "default",
   "data_dir": "./data",
   "output_format": "csv",
   "output_file": "./runs/benchmark_results.csv",

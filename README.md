@@ -21,7 +21,7 @@ The `init.sh` script will automatically create a virtual environment (`.venv`) a
 If you need to install these manually (e.g., for development), run:
 
 ```bash
-pip install requests datasets rouge-score tiktoken huggingface_hub orjson
+pip install -r requirements.txt
 ```
 
 ### LMCache Support

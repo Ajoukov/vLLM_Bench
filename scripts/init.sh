@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 USAGE='./init.sh [config.json] | ./init.sh --cleanup [config.json] | ./init.sh --docker [config.json]'
 
@@ -268,6 +268,7 @@ print(model_cfg.get("port_local", ""))
 print(model_cfg.get("port_remote", ""))
 print(model_cfg.get("model", model_name))  # Use model name from config or fallback to key
 print(model_cfg.get("max_model_len", ""))
+print(cfg.get("storage_class_name", "default"))
 # LMCache configuration - basic
 print(str(lmcache_cfg.get("enabled", False)).lower())
 print(lmcache_cfg.get("chunk_size", 256))
@@ -316,6 +317,7 @@ for model_name in "${MODELS[@]}"; do
     lmcache_max_local_disk_size="${_vals[12]:-0}"
     lmcache_remote_url="${_vals[13]:-}"
     lmcache_remote_serde="${_vals[14]:-}"
+    storage_class_name="${_vals[15]:-default}"
     
     echo "Configuration for $model_name:"
     for var in namespace hf_token port_local port_remote model max_model_len; do
@@ -408,6 +410,26 @@ replacements:
           - spec.template.spec.containers.[name=vllm-container].env.[name=HF_TOKEN].valueFrom.secretKeyRef.name
           - spec.template.spec.containers.[name=infinity].env.[name=HUGGING_FACE_HUB_TOKEN].valueFrom.secretKeyRef.name
           - spec.template.spec.containers.[name=infinity].env.[name=HF_TOKEN].valueFrom.secretKeyRef.name
+
+patchesJson6902:
+  - target:
+      group: v1
+      version: v1
+      kind: PersistentVolumeClaim
+      name: vllm-pvc
+    patch: |-
+      - op: replace
+        path: /spec/storageClassName
+        value: ${storage_class_name}
+  - target:
+      group: v1
+      version: v1
+      kind: PersistentVolumeClaim
+      name: hfcache-pvc
+    patch: |-
+      - op: replace
+        path: /spec/storageClassName
+        value: ${storage_class_name}
 "
     
     # Materialize kustomize dir
@@ -415,12 +437,16 @@ replacements:
     cp template/* k8s
     printf "%s\n" "${kustomization}" > k8s/kustomization.yaml
     
+    # Build kustomization to apply patches and resolve references
+    echo "Building kustomization manifests..."
+    kubectl kustomize k8s > k8s/manifests.yaml
+    
     # Always restart for new model (as requested)
     echo "Deploying model: ${model}..."
     kubectl -n "${namespace}" delete job vllm --ignore-not-found
     kubectl -n "${namespace}" delete pod -l app=vllm --ignore-not-found --force --grace-period=0 || true
     kubectl -n "${namespace}" wait --for=delete job/vllm --timeout=120s || true
-    kubectl apply -k k8s
+    kubectl apply -f k8s/manifests.yaml
     echo "Waiting for model to be ready..."
     kubectl -n "${namespace}" wait --for=condition=Ready pod -l app=vllm --timeout=30m
     echo "Model ${model} is ready!"
