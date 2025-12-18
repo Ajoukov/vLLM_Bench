@@ -23,6 +23,9 @@ Kubernetes namespace where vLLM pods will be deployed.
 ### `hf_token` (string, required)
 Hugging Face API token. Required for downloading models and datasets. For gated models (e.g., Llama), ensure token account has accepted the license.
 
+### `storage_class_name` (string, optional)
+Kubernetes storage class name for vLLM persistent volume claims.
+
 ### `output_format` (string, optional)
 Output format for benchmark results. Options: `"json"` or `"csv"`. Default: `"csv"`.
 

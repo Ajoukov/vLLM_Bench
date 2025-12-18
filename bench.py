@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
+
+
 """
-Industry-grade LLM benchmarking harness over vLLM OpenAI routes.
+Industry-grade LLM benchmarking harness over vLLM OpenAI.
+
+@authors:
+    - Alexander "Sasha" Joukov (alexander.joukov@stonybrook.edu)
+    - Amir Zadeh (anajafizadeh@cs.stonybrook.edu)
+
+@year: 2025
+@by: File Systems & Storage Lab @ Stony Brook University
 
 Key features
 - Comprehensive workload coverage across multiple categories
