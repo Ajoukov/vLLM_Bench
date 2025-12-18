@@ -1,4 +1,4 @@
-# vLLM Bench
+# vLLM Bench: Real-World LLM Inference Benchmarking for vLLM
 
 ## Prereqs
 
