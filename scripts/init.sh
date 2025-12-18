@@ -64,7 +64,7 @@ PY
     
     # Build Docker image
     echo "Building Docker image: $IMAGE_NAME"
-    docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+    docker build -t "$IMAGE_NAME" "$SCRIPT_DIR" -f build/Dockerfile
     
     if [ $? -ne 0 ]; then
         echo "Error: Docker build failed"
