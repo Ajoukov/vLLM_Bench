@@ -4,7 +4,7 @@ metadata:
   name: vllm-service
   labels: { app: vllm }
 spec:
-  type: NodePort
+  type: ClusterIP
   selector: { app: vllm }
   sessionAffinity: None
   ports:
@@ -12,4 +12,3 @@ spec:
       port: 80
       targetPort: 8000
       protocol: TCP
-      nodePort: 31286
