@@ -238,7 +238,7 @@ source .venv/bin/activate
 # Install dependencies
 echo "Installing dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet requests datasets rouge-score tiktoken huggingface_hub orjson
+pip install --quiet -r requirements.txt
 
 # Function to get all model names
 get_models() {
